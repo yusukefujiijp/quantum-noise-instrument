@@ -1,0 +1,631 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8">
+  <title>量子力学的ノイズ楽器 | Quantum Mechanical Noise Instrument</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <style>
+    body {
+      font-family: sans-serif;
+      background-color: #0a0a2a;
+      color: #e0e0ff;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      min-height: 100vh;
+    }
+    
+    h1 {
+      font-size: 24px;
+      margin: 20px 0;
+      text-align: center;
+      line-height: 1.4;
+    }
+    
+    .subtitle {
+      font-size: 16px;
+      margin-top: 5px;
+      opacity: 0.8;
+    }
+    
+    .container {
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+    }
+    
+    .q-buttons {
+      display: flex;
+      justify-content: center;
+      flex-wrap: wrap;
+      gap: 10px;
+      max-width: 350px;
+    }
+    
+    button {
+      border: none;
+      border-radius: 50%;
+      width: 80px;
+      height: 80px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.3);
+    }
+    
+    button:active {
+      transform: scale(0.95);
+    }
+    
+    .main-btn {
+      background: #4a4a8a;
+      color: white;
+      width: 100px;
+      height: 100px;
+      font-size: 16px;
+      margin-bottom: 10px;
+    }
+    
+    .play-icon {
+      font-size: 24px;
+      margin-bottom: 5px;
+    }
+    
+    .superposition-btn { background: #7b68ee; color: white; }
+    .uncertainty-btn { background: #9370db; color: white; }
+    .entanglement-btn { background: #800080; color: white; }
+    .tunneling-btn { background: #4b0082; color: white; }
+    
+    .active { box-shadow: 0 0 15px 5px rgba(255, 255, 255, 0.3); }
+    
+    .status {
+      margin-top: 15px;
+      font-size: 14px;
+      color: #8080ff;
+      height: 20px;
+      text-align: center;
+    }
+    
+    .btn-label {
+      margin-top: 6px;
+      font-size: 10px;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>
+      量子力学的ノイズ楽器
+      <div class="subtitle">Quantum Mechanical Noise Instrument</div>
+    </h1>
+    
+    <button id="play-btn" class="main-btn">
+      <span class="play-icon">▶</span>
+      再生
+      <span class="btn-label">Play</span>
+    </button>
+    
+    <div class="q-buttons">
+      <button id="superposition-btn" class="superposition-btn">
+        重ね合わせ
+        <span class="btn-label">Superposition</span>
+      </button>
+      <button id="uncertainty-btn" class="uncertainty-btn">
+        不確定性
+        <span class="btn-label">Uncertainty</span>
+      </button>
+      <button id="entanglement-btn" class="entanglement-btn">
+        量子もつれ
+        <span class="btn-label">Entanglement</span>
+      </button>
+      <button id="tunneling-btn" class="tunneling-btn">
+        トンネル効果
+        <span class="btn-label">Tunneling</span>
+      </button>
+    </div>
+    
+    <div class="status" id="status-text">準備完了 | Ready</div>
+  </div>
+
+  <script>
+    // 基本変数
+    let audioContext = null;
+    let isPlaying = false;
+    let activeNodes = [];
+    let timerIds = [];
+    
+    // 量子効果の状態
+    const quantumStates = {
+      superposition: false,
+      uncertainty: false,
+      entanglement: false,
+      tunneling: false
+    };
+    
+    // DOM要素
+    const playButton = document.getElementById('play-btn');
+    const superpositionButton = document.getElementById('superposition-btn');
+    const uncertaintyButton = document.getElementById('uncertainty-btn');
+    const entanglementButton = document.getElementById('entanglement-btn');
+    const tunnelingButton = document.getElementById('tunneling-btn');
+    const statusText = document.getElementById('status-text');
+    
+    // AudioContextの初期化
+    function getAudioContext() {
+      if (!audioContext) {
+        try {
+          audioContext = new (window.AudioContext || window.webkitAudioContext)();
+        } catch (e) {
+          console.error('Web Audio API is not supported');
+          statusText.textContent = "オーディオ初期化エラー | Audio initialization error";
+          return null;
+        }
+      }
+      return audioContext;
+    }
+    
+    // ノードを追跡して管理
+    function trackNode(node) {
+      if (node) activeNodes.push(node);
+      return node;
+    }
+    
+    // タイマーを追跡して管理
+    function trackTimer(timerId) {
+      if (timerId) timerIds.push(timerId);
+      return timerId;
+    }
+    
+    // 全てのノードを停止
+    function stopAllNodes() {
+      // すべてのタイマーをクリア
+      timerIds.forEach(id => {
+        clearTimeout(id);
+        clearInterval(id);
+      });
+      timerIds = [];
+      
+      // すべてのノードを停止
+      activeNodes.forEach(node => {
+        try {
+          if (node) {
+            if (node.stop && typeof node.stop === 'function') {
+              node.stop(0);
+            }
+            if (node.disconnect && typeof node.disconnect === 'function') {
+              node.disconnect();
+            }
+          }
+        } catch (e) {
+          console.error('停止エラー:', e);
+        }
+      });
+      
+      activeNodes = [];
+      
+      if (audioContext) {
+        audioContext.close().then(() => {
+          audioContext = null;
+        }).catch(e => {
+          console.error('AudioContext停止エラー:', e);
+        });
+      }
+    }
+    
+    // ノイズバッファの作成（共通関数）
+    function createNoiseBuffer(ctx, duration, type = 'white') {
+      const bufferSize = ctx.sampleRate * duration;
+      const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
+      const data = buffer.getChannelData(0);
+      
+      if (type === 'pink') {
+        let b0 = 0, b1 = 0, b2 = 0;
+        for (let i = 0; i < bufferSize; i++) {
+          const white = Math.random() * 2 - 1;
+          b0 = 0.99765 * b0 + white * 0.0990460;
+          b1 = 0.96300 * b1 + white * 0.2965164;
+          b2 = 0.57000 * b2 + white * 1.0526913;
+          data[i] = (b0 + b1 + b2) * 0.05;
+        }
+      } else {
+        for (let i = 0; i < bufferSize; i++) {
+          data[i] = (Math.random() * 2 - 1) * 0.15;
+        }
+      }
+      
+      return buffer;
+    }
+    
+    // ベースノイズの生成
+    function createBaseNoise(ctx) {
+      try {
+        // ノイズバッファ
+        const noiseBuffer = createNoiseBuffer(ctx, 2.0, 'pink');
+        
+        // ノイズソース
+        const noiseSource = ctx.createBufferSource();
+        noiseSource.buffer = noiseBuffer;
+        noiseSource.loop = true;
+        
+        // フィルターとゲイン
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'lowpass';
+        filter.frequency.value = 1000;
+        
+        const gain = ctx.createGain();
+        gain.gain.value = 0.3;
+        
+        // 接続
+        noiseSource.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        
+        // 追跡
+        trackNode(noiseSource);
+        trackNode(filter);
+        trackNode(gain);
+        
+        // 再生
+        noiseSource.start();
+        
+        return { noiseSource, gain };
+      } catch (e) {
+        console.error('ベースノイズ生成エラー:', e);
+        return null;
+      }
+    }
+    
+    // 重ね合わせ効果
+    function createSuperpositionEffect(ctx) {
+      const frequencies = [233, 277, 349, 415, 466];
+      const oscillators = [];
+      
+      // 複数の周波数を重ね合わせる
+      for (let i = 0; i < frequencies.length; i++) {
+        const osc = ctx.createOscillator();
+        osc.type = i % 2 === 0 ? 'sine' : 'triangle';
+        osc.frequency.value = frequencies[i];
+        
+        const gain = ctx.createGain();
+        gain.gain.value = 0.05;
+        
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        
+        trackNode(osc);
+        trackNode(gain);
+        oscillators.push(osc);
+        
+        osc.start();
+      }
+      
+      // 周波数を周期的に変動させる
+      const frequencyModulator = setInterval(() => {
+        if (isPlaying && quantumStates.superposition) {
+          oscillators.forEach((osc, i) => {
+            const newFreq = frequencies[i] * (0.95 + Math.random() * 0.1);
+            osc.frequency.setValueAtTime(newFreq, ctx.currentTime);
+          });
+        }
+      }, 1000);
+      
+      trackTimer(frequencyModulator);
+      return oscillators;
+    }
+    
+    // 不確定性効果
+    function createUncertaintyEffect(ctx) {
+      // 時間幅が狭い（周波数幅が広い）パルスと、
+      // 時間幅が広い（周波数幅が狭い）パルスを交互に生成
+      
+      const generatePulse = () => {
+        if (!isPlaying || !quantumStates.uncertainty) return;
+        
+        // 時間-周波数の不確定性を表現
+        const timeWidth = 0.01 + Math.random() * 0.2;
+        const freqWidth = 1 / timeWidth;
+        
+        // パルスノイズ
+        const pulseBuffer = createNoiseBuffer(ctx, timeWidth);
+        const pulseSource = ctx.createBufferSource();
+        pulseSource.buffer = pulseBuffer;
+        
+        // フィルター
+        const filter = ctx.createBiquadFilter();
+        filter.type = 'bandpass';
+        filter.frequency.value = 500 * freqWidth;
+        filter.Q.value = 0.5 / timeWidth;
+        
+        // ゲイン
+        const gain = ctx.createGain();
+        gain.gain.value = 0.2;
+        
+        // 接続
+        pulseSource.connect(filter);
+        filter.connect(gain);
+        gain.connect(ctx.destination);
+        
+        // 再生
+        pulseSource.start();
+        
+        // 追跡
+        trackNode(pulseSource);
+        trackNode(filter);
+        trackNode(gain);
+        
+        // 次のパルスをスケジュール
+        trackTimer(setTimeout(generatePulse, 200 + Math.random() * 500));
+      };
+      
+      // 最初のパルスを生成
+      generatePulse();
+    }
+    
+    // 量子もつれ効果
+    function createEntanglementEffect(ctx) {
+      // ステレオ効果（左右チャンネルの相関）
+      const panner = ctx.createStereoPanner();
+      panner.pan.value = 0;
+      
+      const createEntangledPair = () => {
+        if (!isPlaying || !quantumStates.entanglement) return;
+        
+        // 2チャンネルの相関したノイズを生成
+        const buffer = ctx.createBuffer(2, ctx.sampleRate * 0.2, ctx.sampleRate);
+        const leftData = buffer.getChannelData(0);
+        const rightData = buffer.getChannelData(1);
+        
+        // 相関タイプ（同期または反転）
+        const correlation = Math.random() < 0.5 ? 1 : -1;
+        
+        for (let i = 0; i < leftData.length; i++) {
+          const value = Math.random() * 2 - 1;
+          leftData[i] = value * 0.15;
+          rightData[i] = value * correlation * 0.15;
+        }
+        
+        // 再生
+        const source = ctx.createBufferSource();
+        source.buffer = buffer;
+        
+        const gain = ctx.createGain();
+        gain.gain.value = 0.3;
+        
+        source.connect(gain);
+        gain.connect(ctx.destination);
+        
+        source.start();
+        
+        // 追跡
+        trackNode(source);
+        trackNode(gain);
+        
+        // パンニングを変更（空間的な広がり）
+        panner.pan.setValueAtTime(
+          -0.8 + Math.random() * 1.6,
+          ctx.currentTime
+        );
+        
+        // 次のもつれイベントをスケジュール
+        trackTimer(setTimeout(createEntangledPair, 500 + Math.random() * 1000));
+      };
+      
+      createEntangledPair();
+      trackNode(panner);
+    }
+    
+    // 量子トンネル効果
+    function createTunnelingEffect(ctx) {
+      const generateTunnel = () => {
+        if (!isPlaying || !quantumStates.tunneling) return;
+        
+        // 障壁前のノイズ
+        const preBuffer = createNoiseBuffer(ctx, 0.1);
+        const preSource = ctx.createBufferSource();
+        preSource.buffer = preBuffer;
+        
+        // 障壁フィルター（理論上は通過不可能）
+        const barrierFilter = ctx.createBiquadFilter();
+        barrierFilter.type = 'notch';
+        barrierFilter.frequency.value = 800;
+        barrierFilter.Q.value = 10;
+        
+        const preGain = ctx.createGain();
+        preGain.gain.value = 0.2;
+        
+        // 接続と再生
+        preSource.connect(barrierFilter);
+        barrierFilter.connect(preGain);
+        preGain.connect(ctx.destination);
+        
+        preSource.start();
+        
+        // 追跡
+        trackNode(preSource);
+        trackNode(barrierFilter);
+        trackNode(preGain);
+        
+        // トンネル確率
+        if (Math.random() < 0.3) {
+          // トンネル通過音
+          setTimeout(() => {
+            if (!isPlaying || !quantumStates.tunneling) return;
+            
+            const tunnelBuffer = createNoiseBuffer(ctx, 0.05);
+            const tunnelSource = ctx.createBufferSource();
+            tunnelSource.buffer = tunnelBuffer;
+            
+            const tunnelFilter = ctx.createBiquadFilter();
+            tunnelFilter.type = 'bandpass';
+            tunnelFilter.frequency.value = barrierFilter.frequency.value;
+            tunnelFilter.Q.value = 1;
+            
+            const tunnelGain = ctx.createGain();
+            tunnelGain.gain.value = 0.4;
+            
+            tunnelSource.connect(tunnelFilter);
+            tunnelFilter.connect(tunnelGain);
+            tunnelGain.connect(ctx.destination);
+            
+            tunnelSource.start();
+            
+            trackNode(tunnelSource);
+            trackNode(tunnelFilter);
+            trackNode(tunnelGain);
+            
+            statusText.textContent = "トンネル発生! | Tunneling occurred!";
+            setTimeout(() => {
+              if (isPlaying) statusText.textContent = "";
+            }, 1000);
+          }, 100);
+        }
+        
+        // 次のトンネル試行をスケジュール
+        trackTimer(setTimeout(generateTunnel, 1000 + Math.random() * 2000));
+      };
+      
+      generateTunnel();
+    }
+    
+    // 量子効果のトグル
+    function toggleQuantumEffect(effectName) {
+      if (!isPlaying) {
+        statusText.textContent = "先に再生ボタンを押してください | Press play button first";
+        return;
+      }
+      
+      const ctx = getAudioContext();
+      if (!ctx) return;
+      
+      // 効果の状態を切り替え
+      quantumStates[effectName] = !quantumStates[effectName];
+      
+      // ボタンのスタイルを更新
+      const button = document.getElementById(`${effectName}-btn`);
+      if (quantumStates[effectName]) {
+        button.classList.add('active');
+        
+        // 効果名の日英対応
+        const effectNames = {
+          superposition: "重ね合わせ | Superposition",
+          uncertainty: "不確定性 | Uncertainty",
+          entanglement: "量子もつれ | Entanglement",
+          tunneling: "トンネル効果 | Tunneling"
+        };
+        
+        statusText.textContent = `${effectNames[effectName]} ON`;
+        
+        // 効果を有効化
+        switch (effectName) {
+          case 'superposition':
+            createSuperpositionEffect(ctx);
+            break;
+          case 'uncertainty':
+            createUncertaintyEffect(ctx);
+            break;
+          case 'entanglement':
+            createEntanglementEffect(ctx);
+            break;
+          case 'tunneling':
+            createTunnelingEffect(ctx);
+            break;
+        }
+      } else {
+        button.classList.remove('active');
+        
+        // 効果名の日英対応
+        const effectNames = {
+          superposition: "重ね合わせ | Superposition",
+          uncertainty: "不確定性 | Uncertainty",
+          entanglement: "量子もつれ | Entanglement",
+          tunneling: "トンネル効果 | Tunneling"
+        };
+        
+        statusText.textContent = `${effectNames[effectName]} OFF`;
+        // 効果は自動的に停止するので何もしない
+      }
+    }
+    
+    // 効果の再生停止
+    function stopPlayback() {
+      isPlaying = false;
+      
+      // すべての量子状態をリセット
+      for (const effect in quantumStates) {
+        quantumStates[effect] = false;
+        const button = document.getElementById(`${effect}-btn`);
+        button.classList.remove('active');
+      }
+      
+      // 全てのノードとタイマーを停止
+      stopAllNodes();
+      
+      // ボタンの表示を更新
+      playButton.innerHTML = '<span class="play-icon">▶</span>再生<span class="btn-label">Play</span>';
+      statusText.textContent = "停止中 | Stopped";
+    }
+    
+    // 効果の再生開始
+    function startPlayback() {
+      if (isPlaying) return;
+      
+      // 新しいAudioContextで開始
+      audioContext = new (window.AudioContext || window.webkitAudioContext)();
+      
+      isPlaying = true;
+      playButton.innerHTML = '<span class="play-icon">⏹</span>停止<span class="btn-label">Stop</span>';
+      statusText.textContent = "再生中 | Playing";
+      
+      if (!audioContext) {
+        isPlaying = false;
+        playButton.innerHTML = '<span class="play-icon">▶</span>再生<span class="btn-label">Play</span>';
+        statusText.textContent = "初期化エラー | Initialization error";
+        return;
+      }
+      
+      // ベースノイズの開始
+      createBaseNoise(audioContext);
+    }
+    
+    // イベントリスナーの設定
+    function setupEventListeners() {
+      // 再生ボタン
+      playButton.addEventListener('click', () => {
+        if (isPlaying) {
+          stopPlayback();
+        } else {
+          startPlayback();
+        }
+      });
+      
+      // 量子効果ボタン
+      superpositionButton.addEventListener('click', () => toggleQuantumEffect('superposition'));
+      uncertaintyButton.addEventListener('click', () => toggleQuantumEffect('uncertainty'));
+      entanglementButton.addEventListener('click', () => toggleQuantumEffect('entanglement'));
+      tunnelingButton.addEventListener('click', () => toggleQuantumEffect('tunneling'));
+      
+      // ページを離れる時にクリーンアップ
+      window.addEventListener('beforeunload', () => {
+        stopPlayback();
+      });
+    }
+    
+    // 初期化
+    function init() {
+      setupEventListeners();
+      statusText.textContent = "準備完了 | Ready";
+    }
+    
+    // アプリケーション初期化
+    init();
+  </script>
+</body>
+</html>
